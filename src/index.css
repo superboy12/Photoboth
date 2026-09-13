@@ -1,0 +1,181 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+    background: #fdf4f8;
+    color: #1a1a2e;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #fce7f3;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #f9a8d4;
+    border-radius: 3px;
+  }
+}
+
+@layer components {
+  .glass {
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+  }
+
+  .glass-dark {
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .btn-primary {
+    @apply bg-gradient-to-r from-pink-400 to-lavender-500 text-white font-bold py-3 px-8 rounded-2xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-pink-500 font-bold py-3 px-8 rounded-2xl shadow-md hover:shadow-lg border-2 border-pink-200 hover:border-pink-400 transform hover:-translate-y-0.5 transition-all duration-200 active:scale-95;
+  }
+
+  .btn-ghost {
+    @apply text-pink-400 font-semibold py-2 px-6 rounded-xl hover:bg-pink-50 transition-all duration-200;
+  }
+
+  .card {
+    @apply bg-white rounded-3xl shadow-xl p-6 border border-pink-100;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 rounded-2xl border-2 border-pink-100 focus:border-pink-400 focus:outline-none text-center text-lg font-semibold transition-colors bg-white/80;
+  }
+
+  .tag {
+    @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold;
+  }
+}
+
+/* Flash animation overlay */
+.flash-overlay {
+  position: fixed;
+  inset: 0;
+  background: white;
+  pointer-events: none;
+  z-index: 9999;
+  animation: flash 0.35s ease-out forwards;
+}
+
+@keyframes flash {
+  0% { opacity: 0; }
+  40% { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+
+/* Countdown number animation */
+.countdown-number {
+  animation: countdownPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes countdownPop {
+  0% { transform: scale(0.3); opacity: 0; }
+  60% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Confetti container */
+#confetti-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Camera video mirroring */
+.camera-mirror {
+  transform: scaleX(-1);
+}
+
+/* Draggable sticker */
+.sticker-handle {
+  cursor: move;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Floating elements */
+.floating {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Scrollbar for picker */
+.picker-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #f9a8d4 transparent;
+}
+
+/* Photo strip specific */
+.photo-strip {
+  background: white;
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 4px 4px 20px rgba(0,0,0,0.2);
+}
+
+/* Gradient backgrounds */
+.bg-hero {
+  background: linear-gradient(135deg, #fce7f3 0%, #ede9fe 50%, #ddd6fe 100%);
+}
+
+.bg-pink-lavender {
+  background: linear-gradient(135deg, #fbcfe8 0%, #ddd6fe 100%);
+}
+
+/* Shimmer loading effect */
+.shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Pulse ring for recording indicator */
+.pulse-ring::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  animation: pulseRing 1.5s ease-out infinite;
+}
+
+@keyframes pulseRing {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
