@@ -226,11 +226,11 @@ export default function RoomPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
         {/* Main camera area */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-none lg:flex-1 flex flex-col">
           {/* Camera preview */}
-          <div className="relative flex-1 bg-black overflow-hidden" style={{ minHeight: '300px' }}>
+          <div className="relative w-full aspect-[4/3] lg:aspect-auto lg:flex-1 bg-black overflow-hidden" style={{ minHeight: '300px', maxHeight: '70vh' }}>
             {camError ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-4 p-6">
                 <Camera className="w-16 h-16 text-white/30" />

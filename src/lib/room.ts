@@ -76,7 +76,7 @@ export async function createRoom(hostName: string): Promise<{ roomCode: string; 
     return null
   }
 
-  const { error: partError } = await supabase.from('participants').insert({
+  const { error: partError } = await supabase.from('participants').upsert({
     id: userId,
     room_code: code,
     name: hostName,
@@ -124,7 +124,7 @@ export async function joinRoom(
     return { success: true, userId }
   }
 
-  const { error: partError } = await supabase.from('participants').insert({
+  const { error: partError } = await supabase.from('participants').upsert({
     id: userId,
     room_code: upperCode,
     name: participantName,
