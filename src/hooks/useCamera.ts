@@ -12,7 +12,7 @@ export interface UseCameraReturn {
   selectedDevice: string
   isLoading: boolean
   error: string | null
-  capturePhoto: () => string | null
+  capturePhoto: (sourceOverride?: HTMLCanvasElement | HTMLVideoElement) => string | null
   switchCamera: (deviceId: string) => void
   stopCamera: () => void
   startCamera: () => void

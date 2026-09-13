@@ -68,6 +68,8 @@ export function useAudioChat(roomCode: string, userId: string, participantIds: s
       const audioEl = new Audio()
       audioEl.autoplay = true
       audioEl.setAttribute('playsinline', 'true')
+      audioEl.style.display = 'none'
+      document.body.appendChild(audioEl)
 
       pc.ontrack = (event) => {
         if (event.streams[0]) {
@@ -184,6 +186,7 @@ export function useAudioChat(roomCode: string, userId: string, participantIds: s
     peersRef.current.forEach(({ pc, audioEl }) => {
       pc.close()
       audioEl.srcObject = null
+      audioEl.remove()
     })
     peersRef.current.clear()
 

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { LogOut, Users, Camera, ChevronDown, RefreshCw, Mic, MicOff, Volume2 } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 import { useRoom } from '../hooks/useRoom'
 import { useAudioChat } from '../hooks/useAudioChat'
 import { useVirtualBg } from '../hooks/useVirtualBg'
@@ -94,7 +95,7 @@ export default function RoomPage() {
   useEffect(() => {
     if (!code) return
     const channel = supabase.channel(`retake-${code}`)
-    channel.on('broadcast', { event: 'retake-single' }, ({ payload }) => {
+    channel.on('broadcast', { event: 'retake-single' }, ({ payload }: { payload: any }) => {
       if (payload.shotIndex) {
         setRetakeTarget(payload.shotIndex)
       }
@@ -140,6 +141,15 @@ export default function RoomPage() {
     await incrementTake()
   }
 
+  const handleRetakeAll = async () => {
+    setCapturedPhotos([])
+    if (isHost) {
+      await incrementTake()
+    } else {
+      toast('Waiting for host to start retake...')
+    }
+  }
+
   const handleUsePhoto = () => {
     if (capturedPhotos.length === 4) {
       // In a real app we'd pass all 4 photos for the strip.
@@ -156,7 +166,6 @@ export default function RoomPage() {
   const myParticipant = room?.participants.find((p) => p.id === userId)
   const isReady = myParticipant?.isReady ?? false
   const sessionStatus = room?.sessionStatus || 'waiting'
-  const bg = room?.selectedBackground || ORIGINAL_BG
   const bgCSS = backgroundToCSS(bg)
 
   if (isLoading) {
@@ -369,7 +378,7 @@ export default function RoomPage() {
               >
                 <button
                   id="btn-retake"
-                  onClick={handleRetake}
+                  onClick={handleRetakeAll}
                   className="flex-1 max-w-[160px] flex items-center justify-center gap-2 py-3 rounded-2xl bg-white/10 text-white font-bold hover:bg-white/20 transition-colors border border-white/20"
                 >
                   <RefreshCw className="w-4 h-4" /> Retake All

@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { SelfieSegmentation, Results } from '@mediapipe/selfie_segmentation'
-import { BackgroundConfig, backgroundToCSS } from '../lib/backgrounds'
+import * as mpSelfieSegmentation from '@mediapipe/selfie_segmentation'
+import { type BackgroundConfig, backgroundToCSS } from '../lib/backgrounds'
+
+// Handle Vite / Rollup CommonJS export quirks for mediapipe
+const SelfieSegmentation = 
+  mpSelfieSegmentation.SelfieSegmentation || 
+  (mpSelfieSegmentation as any).default?.SelfieSegmentation
 
 export function useVirtualBg(
   videoElement: HTMLVideoElement | null,
@@ -8,7 +13,7 @@ export function useVirtualBg(
   isActive: boolean
 ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const segmentationRef = useRef<SelfieSegmentation | null>(null)
+  const segmentationRef = useRef<any>(null)
   const [isReady, setIsReady] = useState(false)
   const requestFrameRef = useRef<number>(0)
 
@@ -36,7 +41,7 @@ export function useVirtualBg(
 
   // Handle segmentation results
   const onResults = useCallback(
-    (results: Results) => {
+    (results: any) => {
       const canvas = canvasRef.current
       if (!canvas) return
       const ctx = canvas.getContext('2d')
