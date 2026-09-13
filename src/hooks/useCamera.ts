@@ -57,8 +57,8 @@ export function useCamera(): UseCameraReturn {
       const constraints: MediaStreamConstraints = {
         video: {
           deviceId: deviceId ? { exact: deviceId } : undefined,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
           facingMode: deviceId ? undefined : 'user',
         },
         audio: false,
@@ -119,21 +119,48 @@ export function useCamera(): UseCameraReturn {
     }
   }, [stream])
 
-  const capturePhoto = useCallback((): string | null => {
-    if (!videoRef.current) return null
-    const video = videoRef.current
+  const capturePhoto = useCallback((sourceOverride?: HTMLCanvasElement | HTMLVideoElement): string | null => {
+    const video = sourceOverride || videoRef.current
+    if (!video) return null
+    
+    // Target aspect ratio (4:3 for photobooth style)
+    const TARGET_RATIO = 4 / 3
+    
+    const vWidth = (video as HTMLVideoElement).videoWidth || (video as HTMLCanvasElement).width || 1920
+    const vHeight = (video as HTMLVideoElement).videoHeight || (video as HTMLCanvasElement).height || 1080
+    const vRatio = vWidth / vHeight
+
+    // Calculate crop dimensions
+    let sWidth = vWidth
+    let sHeight = vHeight
+    let sx = 0
+    let sy = 0
+
+    if (vRatio > TARGET_RATIO) {
+      // Video is wider than 4:3 (e.g. 16:9), crop sides
+      sWidth = vHeight * TARGET_RATIO
+      sx = (vWidth - sWidth) / 2
+    } else if (vRatio < TARGET_RATIO) {
+      // Video is taller than 4:3 (e.g. portrait), crop top/bottom
+      sHeight = vWidth / TARGET_RATIO
+      sy = (vHeight - sHeight) / 2
+    }
+
     const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth || 1280
-    canvas.height = video.videoHeight || 720
+    // Set output resolution (high quality)
+    canvas.width = 1440 
+    canvas.height = 1080
     const ctx = canvas.getContext('2d')
     if (!ctx) return null
 
     // Mirror the capture (un-mirror from CSS transform)
     ctx.translate(canvas.width, 0)
     ctx.scale(-1, 1)
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    
+    // Draw with crop
+    ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height)
 
-    return canvas.toDataURL('image/png', 0.95)
+    return canvas.toDataURL('image/png', 1.0)
   }, [])
 
   // Cleanup on unmount

@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { LogOut, Users, Camera, ChevronDown, RefreshCw, Mic, MicOff, Volume2 } from 'lucide-react'
 import { useRoom } from '../hooks/useRoom'
 import { useAudioChat } from '../hooks/useAudioChat'
+import { useVirtualBg } from '../hooks/useVirtualBg'
 import { useCamera } from '../hooks/useCamera'
 import { useCountdown } from '../hooks/useCountdown'
 import { getOrCreateUserId, getUserName } from '../lib/room'
@@ -41,6 +42,7 @@ export default function RoomPage() {
   const [showFlash, setShowFlash] = useState(false)
   const [activeTab, setActiveTab] = useState<'frame' | 'background'>('frame')
   const [showEditor, setShowEditor] = useState(false)
+  const [retakeTarget, setRetakeTarget] = useState<number | null>(null)
   const [finalPhoto, setFinalPhoto] = useState<string | null>(null)
   const hasStartedCamera = useRef(false)
 
@@ -53,27 +55,55 @@ export default function RoomPage() {
     return () => stopCamera()
   }, [])
 
-  const doCapture = useCallback(async () => {
+    const bg = room?.selectedBackground || ORIGINAL_BG
+  const isBgActive = bg.type !== 'original' && room?.sessionStatus !== 'review'
+  const { canvasRef: bgCanvasRef, isReady: bgReady } = useVirtualBg(videoRef.current, bg, isBgActive)
+
+  const doCapture = useCallback(async (shotIndex: number) => {
     // Camera flash
     setShowFlash(true)
     setTimeout(() => setShowFlash(false), 500)
 
-    const photo = capturePhoto()
+    const source = (isBgActive && bgReady && bgCanvasRef.current) ? bgCanvasRef.current : undefined
+    const photo = capturePhoto(source)
     if (!photo) {
       toast.error('Could not capture photo. Camera may not be ready.')
       return
     }
 
-    setCapturedPhotos((prev) => [...prev, photo])
-    setAllTakes((prev) => [...prev, [photo]])
+    setCapturedPhotos((prev) => {
+      const next = [...prev]
+      next[shotIndex - 1] = photo
+      return next
+    })
+    
+    // We only push to allTakes for the PhotoEditor when they confirm
+    // setAllTakes((prev) => [...prev, [photo]])
 
-    // Notify status change to review
-    if (isHost) {
-      await setSessionStatus('review')
+    if ((shotIndex === 4 || retakeTarget !== null) && isHost) {
+      setTimeout(async () => {
+        setRetakeTarget(null)
+        await setSessionStatus('review')
+      }, 1000)
     }
-  }, [capturePhoto, isHost, setSessionStatus])
+  }, [capturePhoto, isHost, setSessionStatus, retakeTarget, isBgActive, bgReady])
 
-  const countdown = useCountdown(room?.countdownStartAt || null, doCapture)
+  const countdown = useCountdown(room?.countdownStartAt || null, doCapture, retakeTarget || undefined)
+
+  // Listen to retake single events via realtime
+  useEffect(() => {
+    if (!code) return
+    const channel = supabase.channel(`retake-${code}`)
+    channel.on('broadcast', { event: 'retake-single' }, ({ payload }) => {
+      if (payload.shotIndex) {
+        setRetakeTarget(payload.shotIndex)
+      }
+    })
+    channel.subscribe()
+    return () => {
+      channel.unsubscribe()
+    }
+  }, [code])
 
   useEffect(() => {
     if (!userName) {
@@ -95,20 +125,30 @@ export default function RoomPage() {
     navigate('/')
   }
 
-  const handleRetake = async () => {
-    setCapturedPhotos([])
-    if (isHost) {
-      await incrementTake()
-    } else {
+  const handleRetakeSingle = async (index: number) => {
+    if (!isHost) {
       toast('Waiting for host to start retake...')
+      return
     }
+    const channel = supabase.channel(`retake-${code}`)
+    await channel.send({
+      type: 'broadcast',
+      event: 'retake-single',
+      payload: { shotIndex: index + 1 },
+    })
+    setRetakeTarget(index + 1)
+    await incrementTake()
   }
 
   const handleUsePhoto = () => {
-    const last = capturedPhotos[capturedPhotos.length - 1]
-    if (last) {
-      setFinalPhoto(last)
+    if (capturedPhotos.length === 4) {
+      // In a real app we'd pass all 4 photos for the strip.
+      // For now we pass them as an array so PhotoEditor can handle it.
+      setAllTakes((prev) => [...prev, capturedPhotos])
+      setFinalPhoto(capturedPhotos[0]) // Just set the first one to trigger editor
       setShowEditor(true)
+    } else {
+      toast.error('Waiting for all 4 photos to be taken!')
     }
   }
 
@@ -258,29 +298,47 @@ export default function RoomPage() {
                   autoPlay
                   playsInline
                   muted
-                  className="camera-mirror w-full h-full object-cover"
-                  style={{ position: 'relative', zIndex: 1 }}
+                  className={`camera-mirror w-full h-full object-cover ${isBgActive ? 'opacity-0 absolute inset-0 pointer-events-none' : ''}`}
+                  style={{ position: 'relative', zIndex: 0 }}
                 />
+
+                {/* Virtual Background Canvas */}
+                {isBgActive && (
+                  <canvas
+                    ref={bgCanvasRef}
+                    className="camera-mirror w-full h-full object-cover"
+                    style={{ position: 'relative', zIndex: 1 }}
+                  />
+                )}
 
                 {/* Photo preview overlay after capture */}
                 {sessionStatus === 'review' && capturedPhotos.length > 0 && (
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="absolute inset-0 z-10"
+                    className="absolute inset-0 z-10 bg-gray-900 p-2 md:p-4"
                   >
-                    <img
-                      src={capturedPhotos[capturedPhotos.length - 1]}
-                      alt="Captured"
-                      className="w-full h-full object-cover"
-                    />
-                    {room.selectedFrame && (
-                      <CanvasFrameOverlay
-                        frameId={room.selectedFrame}
-                        width={640}
-                        height={480}
-                      />
-                    )}
+                    <div className="grid grid-cols-2 gap-2 md:gap-4 h-full">
+                      {capturedPhotos.map((photo, idx) => (
+                        <div key={idx} className="relative group rounded-xl overflow-hidden shadow-lg border border-white/10 bg-black">
+                          <img src={photo} alt={`Shot ${idx + 1}`} className="w-full h-full object-cover" />
+                          
+                          {/* Single retake button (Host only) */}
+                          {isHost && (
+                            <button
+                              onClick={() => handleRetakeSingle(idx)}
+                              className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity text-white font-bold gap-2"
+                            >
+                              <RefreshCw className="w-6 h-6 mb-1" /> 
+                              Retake Photo {idx + 1}
+                            </button>
+                          )}
+                          <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-md font-bold">
+                            {idx + 1}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </motion.div>
                 )}
 
@@ -314,7 +372,7 @@ export default function RoomPage() {
                   onClick={handleRetake}
                   className="flex-1 max-w-[160px] flex items-center justify-center gap-2 py-3 rounded-2xl bg-white/10 text-white font-bold hover:bg-white/20 transition-colors border border-white/20"
                 >
-                  <RefreshCw className="w-4 h-4" /> Retake
+                  <RefreshCw className="w-4 h-4" /> Retake All
                 </button>
                 <button
                   id="btn-use-photo"

@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "process-frames": "node scripts/process-frames.js"
   },
   "dependencies": {
     "@mediapipe/selfie_segmentation": "^0.1.1675465747",
@@ -31,6 +32,7 @@
     "autoprefixer": "^10.6.0",
     "oxlint": "^1.81.0",
     "postcss": "^8.5.28",
+    "sharp": "^0.35.4",
     "tailwindcss": "^3.4.19",
     "typescript": "~6.0.2",
     "vite": "^8.3.0"
