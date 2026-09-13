@@ -2,8 +2,9 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
-import { LogOut, Users, Camera, ChevronDown, RefreshCw } from 'lucide-react'
+import { LogOut, Users, Camera, ChevronDown, RefreshCw, Mic, MicOff, Volume2 } from 'lucide-react'
 import { useRoom } from '../hooks/useRoom'
+import { useAudioChat } from '../hooks/useAudioChat'
 import { useCamera } from '../hooks/useCamera'
 import { useCountdown } from '../hooks/useCountdown'
 import { getOrCreateUserId, getUserName } from '../lib/room'
@@ -26,6 +27,14 @@ export default function RoomPage() {
 
   const { videoRef, devices, selectedDevice, isLoading: camLoading, error: camError, capturePhoto, switchCamera, stopCamera, startCamera } =
     useCamera()
+
+  const participantIds = room?.participants.map((p) => p.id) || []
+  const { isMicOn, isMuted, micError, speakingUsers, participantMicStatus, turnMicOn, turnMicOff, toggleMute } =
+    useAudioChat(code || '', userId, participantIds)
+
+  useEffect(() => {
+    if (micError) toast.error(micError)
+  }, [micError])
 
   const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]) // current take photos
   const [allTakes, setAllTakes] = useState<string[][]>([]) // all takes for photostrip
@@ -81,6 +90,7 @@ export default function RoomPage() {
 
   const handleLeave = async () => {
     stopCamera()
+    turnMicOff()
     await leaveRoom()
     navigate('/')
   }
@@ -190,6 +200,22 @@ export default function RoomPage() {
               <ChevronDown className="absolute right-1 top-1 w-3 h-3 text-white/50 pointer-events-none" />
             </div>
           )}
+
+          {/* Mic Toggle */}
+          <button
+            onClick={isMicOn ? toggleMute : turnMicOn}
+            className={`p-2 rounded-xl transition-colors ${
+              isMicOn
+                ? isMuted
+                  ? 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'
+                  : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
+                : 'bg-white/10 text-white/50 hover:bg-white/20'
+            }`}
+            title={isMicOn ? (isMuted ? 'Unmute' : 'Mute') : 'Turn on Mic'}
+          >
+            {isMicOn ? isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+          </button>
+
           <button
             id="btn-leave-room"
             onClick={handleLeave}
@@ -358,8 +384,15 @@ export default function RoomPage() {
                     <div className="text-white text-sm font-semibold truncate">
                       {p.name} {p.id === userId && '(you)'}
                     </div>
-                    <div className="text-xs text-white/40">
+                    <div className="text-xs text-white/40 flex items-center gap-2">
                       {p.isHost ? '👑 Host' : ''}
+                      
+                      {/* Audio Indicators */}
+                      {(participantMicStatus[p.id] || (p.id === userId && isMicOn)) && (
+                        <div className={`flex items-center gap-1 ${speakingUsers.has(p.id) ? 'text-green-400' : 'text-white/30'}`}>
+                          {speakingUsers.has(p.id) ? <Volume2 className="w-3 h-3 animate-pulse" /> : <Mic className="w-3 h-3" />}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className={`w-2 h-2 rounded-full ${p.isReady ? 'bg-green-400' : 'bg-white/20'}`} />
