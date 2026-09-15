@@ -141,9 +141,22 @@ export function useWebRTC(roomCode: string, userId: string, participantIds: stri
         }
       }
 
+      pc.onnegotiationneeded = async () => {
+        if (isInitiator) {
+          try {
+            const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
+            if (pc.signalingState !== 'stable') return
+            await pc.setLocalDescription(offer)
+            broadcastSignal('offer', { sdp: pc.localDescription }, remoteUserId)
+          } catch (err) {
+            console.error(err)
+          }
+        }
+      }
+
       if (isInitiator) {
-        // Create and send offer
-        pc.createOffer({ offerToReceiveAudio: true })
+        // Create and send initial offer just in case onnegotiationneeded doesn't fire
+        pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
           .then((offer) => pc.setLocalDescription(offer))
           .then(() => {
             broadcastSignal('offer', { sdp: pc.localDescription }, remoteUserId)
@@ -311,7 +324,8 @@ export function useWebRTC(roomCode: string, userId: string, participantIds: stri
     if (localVideoStream) {
       peersRef.current.forEach(({ pc }) => {
         const senders = pc.getSenders()
-        const videoSender = senders.find(s => s.track?.kind === 'video')
+        const videoTransceiver = pc.getTransceivers().find(t => t.receiver.track.kind === 'video' || t.sender.track?.kind === 'video')
+        const videoSender = videoTransceiver?.sender || senders.find(s => s.track?.kind === 'video')
         const videoTrack = localVideoStream.getVideoTracks()[0]
         
         if (videoSender && videoTrack) {
