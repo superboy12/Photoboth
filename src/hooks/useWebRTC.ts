@@ -198,16 +198,18 @@ export function useWebRTC(roomCode: string, userId: string, participantIds: stri
   const turnMicOff = useCallback(async () => {
     if (localStreamRef.current) {
       localStreamRef.current.getAudioTracks().forEach((t) => t.stop())
+      
+      // Remove audio tracks from all peer connections
+      peersRef.current.forEach(({ pc }) => {
+        const senders = pc.getSenders()
+        const audioSender = senders.find(s => s.track?.kind === 'audio')
+        if (audioSender) {
+          try { pc.removeTrack(audioSender) } catch {}
+        }
+      })
+      
       localStreamRef.current = null
     }
-
-    // Close all peer connections
-    peersRef.current.forEach(({ pc, audioEl }) => {
-      pc.close()
-      audioEl.srcObject = null
-      audioEl.remove()
-    })
-    peersRef.current.clear()
 
     // Clear speaking timers
     analyserTimersRef.current.forEach((timer) => clearInterval(timer))
@@ -329,21 +331,26 @@ export function useWebRTC(roomCode: string, userId: string, participantIds: stri
 
   // When new participants join, try to connect
   useEffect(() => {
-    if (!state.isMicOn) return
     participantIds.forEach((pid) => {
       if (pid !== userId && !peersRef.current.has(pid)) {
         const isInitiator = userId > pid
         createPeer(pid, isInitiator)
       }
     })
-  }, [participantIds, state.isMicOn, userId, createPeer])
+  }, [participantIds, userId, createPeer])
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       turnMicOff()
+      peersRef.current.forEach(({ pc, audioEl }) => {
+        pc.close()
+        audioEl.srcObject = null
+        audioEl.remove()
+      })
+      peersRef.current.clear()
     }
-  }, [])
+  }, [turnMicOff])
 
   return {
     ...state,
