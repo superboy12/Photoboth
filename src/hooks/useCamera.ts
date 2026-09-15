@@ -12,7 +12,7 @@ export interface UseCameraReturn {
   selectedDevice: string
   isLoading: boolean
   error: string | null
-  capturePhoto: (sourceOverride?: HTMLCanvasElement | HTMLVideoElement) => string | null
+  capturePhoto: (sources?: (HTMLCanvasElement | HTMLVideoElement)[]) => string | null
   switchCamera: (deviceId: string) => void
   stopCamera: () => void
   startCamera: () => void
@@ -119,33 +119,10 @@ export function useCamera(): UseCameraReturn {
     }
   }, [stream])
 
-  const capturePhoto = useCallback((sourceOverride?: HTMLCanvasElement | HTMLVideoElement): string | null => {
-    const video = sourceOverride || videoRef.current
-    if (!video) return null
+  const capturePhoto = useCallback((sources?: (HTMLCanvasElement | HTMLVideoElement)[]): string | null => {
+    const validSources = sources && sources.length > 0 ? sources : (videoRef.current ? [videoRef.current] : [])
+    if (validSources.length === 0) return null
     
-    // Target aspect ratio (4:3 for photobooth style)
-    const TARGET_RATIO = 4 / 3
-    
-    const vWidth = (video as HTMLVideoElement).videoWidth || (video as HTMLCanvasElement).width || 1920
-    const vHeight = (video as HTMLVideoElement).videoHeight || (video as HTMLCanvasElement).height || 1080
-    const vRatio = vWidth / vHeight
-
-    // Calculate crop dimensions
-    let sWidth = vWidth
-    let sHeight = vHeight
-    let sx = 0
-    let sy = 0
-
-    if (vRatio > TARGET_RATIO) {
-      // Video is wider than 4:3 (e.g. 16:9), crop sides
-      sWidth = vHeight * TARGET_RATIO
-      sx = (vWidth - sWidth) / 2
-    } else if (vRatio < TARGET_RATIO) {
-      // Video is taller than 4:3 (e.g. portrait), crop top/bottom
-      sHeight = vWidth / TARGET_RATIO
-      sy = (vHeight - sHeight) / 2
-    }
-
     const canvas = document.createElement('canvas')
     // Set output resolution (high quality)
     canvas.width = 1440 
@@ -157,8 +134,35 @@ export function useCamera(): UseCameraReturn {
     ctx.translate(canvas.width, 0)
     ctx.scale(-1, 1)
     
-    // Draw with crop
-    ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height)
+    const numSources = validSources.length
+    const destWidth = canvas.width / numSources
+
+    validSources.forEach((src, idx) => {
+      const vWidth = (src as HTMLVideoElement).videoWidth || (src as HTMLCanvasElement).width || 1920
+      const vHeight = (src as HTMLVideoElement).videoHeight || (src as HTMLCanvasElement).height || 1080
+
+      // Calculate crop dimensions for each section
+      const sectionRatio = destWidth / canvas.height
+      const vRatio = vWidth / vHeight
+
+      let sWidth = vWidth
+      let sHeight = vHeight
+      let sx = 0
+      let sy = 0
+
+      if (vRatio > sectionRatio) {
+        // Video is wider, crop sides
+        sWidth = vHeight * sectionRatio
+        sx = (vWidth - sWidth) / 2
+      } else if (vRatio < sectionRatio) {
+        // Video is taller, crop top/bottom
+        sHeight = vWidth / sectionRatio
+        sy = (vHeight - sHeight) / 2
+      }
+
+      const dx = canvas.width - destWidth * (idx + 1)
+      ctx.drawImage(src, sx, sy, sWidth, sHeight, dx, 0, destWidth, canvas.height)
+    })
 
     return canvas.toDataURL('image/png', 1.0)
   }, [])

@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import { LogOut, Users, Camera, ChevronDown, RefreshCw, Mic, MicOff, Volume2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useRoom } from '../hooks/useRoom'
-import { useAudioChat } from '../hooks/useAudioChat'
+import { useWebRTC } from '../hooks/useWebRTC'
 import { useVirtualBg } from '../hooks/useVirtualBg'
 import { useCamera } from '../hooks/useCamera'
 import { useCountdown } from '../hooks/useCountdown'
@@ -27,12 +27,12 @@ export default function RoomPage() {
   const { room, isLoading, error, isHost, selectFrame, selectBackground, setReady, triggerCountdown, setSessionStatus, leaveRoom, incrementTake } =
     useRoom(code || '', userId)
 
-  const { videoRef, devices, selectedDevice, isLoading: camLoading, error: camError, capturePhoto, switchCamera, stopCamera, startCamera } =
+  const { videoRef, stream, devices, selectedDevice, isLoading: camLoading, error: camError, capturePhoto, switchCamera, stopCamera, startCamera } =
     useCamera()
 
   const participantIds = room?.participants.map((p) => p.id) || []
-  const { isMicOn, isMuted, micError, speakingUsers, participantMicStatus, turnMicOn, turnMicOff, toggleMute } =
-    useAudioChat(code || '', userId, participantIds)
+  const { isMicOn, isMuted, micError, speakingUsers, participantMicStatus, remoteVideoStreams, turnMicOn, turnMicOff, toggleMute } =
+    useWebRTC(code || '', userId, participantIds, stream)
 
   useEffect(() => {
     if (micError) toast.error(micError)
@@ -65,8 +65,19 @@ export default function RoomPage() {
     setShowFlash(true)
     setTimeout(() => setShowFlash(false), 500)
 
-    const source = (isBgActive && bgReady && bgCanvasRef.current) ? bgCanvasRef.current : undefined
-    const photo = capturePhoto(source)
+    const sources: (HTMLCanvasElement | HTMLVideoElement)[] = []
+    if (isBgActive && bgReady && bgCanvasRef.current) {
+      sources.push(bgCanvasRef.current)
+    } else if (videoRef.current) {
+      sources.push(videoRef.current)
+    }
+
+    Object.keys(remoteVideoStreams).forEach((pid) => {
+      const el = document.getElementById(`remote-video-${pid}`) as HTMLVideoElement
+      if (el) sources.push(el)
+    })
+
+    const photo = capturePhoto(sources)
     if (!photo) {
       toast.error('Could not capture photo. Camera may not be ready.')
       return
@@ -87,7 +98,7 @@ export default function RoomPage() {
         await setSessionStatus('review')
       }, 1000)
     }
-  }, [capturePhoto, isHost, setSessionStatus, retakeTarget, isBgActive, bgReady])
+  }, [capturePhoto, isHost, setSessionStatus, retakeTarget, isBgActive, bgReady, remoteVideoStreams])
 
   const countdown = useCountdown(room?.countdownStartAt || null, doCapture, retakeTarget || undefined)
 
@@ -293,32 +304,54 @@ export default function RoomPage() {
               </div>
             ) : (
               <>
-                {/* Background layer */}
-                {bg.type !== 'original' && (
-                  <div
-                    className="absolute inset-0"
-                    style={{ background: bgCSS }}
-                  />
-                )}
+                <div className="absolute inset-0 flex">
+                  {/* Local Stream Container */}
+                  <div className="flex-1 relative overflow-hidden">
+                    {/* Background layer */}
+                    {bg.type !== 'original' && (
+                      <div
+                        className="absolute inset-0"
+                        style={{ background: bgCSS }}
+                      />
+                    )}
 
-                {/* Video */}
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className={`camera-mirror w-full h-full object-cover ${isBgActive ? 'opacity-0 absolute inset-0 pointer-events-none' : ''}`}
-                  style={{ position: 'relative', zIndex: 0 }}
-                />
+                    {/* Video */}
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className={`camera-mirror w-full h-full object-cover ${isBgActive ? 'opacity-0 absolute inset-0 pointer-events-none' : ''}`}
+                      style={{ position: 'relative', zIndex: 0 }}
+                    />
 
-                {/* Virtual Background Canvas */}
-                {isBgActive && (
-                  <canvas
-                    ref={bgCanvasRef}
-                    className="camera-mirror w-full h-full object-cover"
-                    style={{ position: 'relative', zIndex: 1 }}
-                  />
-                )}
+                    {/* Virtual Background Canvas */}
+                    {isBgActive && (
+                      <canvas
+                        ref={bgCanvasRef}
+                        className="camera-mirror w-full h-full object-cover"
+                        style={{ position: 'relative', zIndex: 1 }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Remote Streams */}
+                  {Object.entries(remoteVideoStreams).map(([pid, rStream]) => (
+                    <div key={pid} className="flex-1 relative overflow-hidden border-l border-white/10">
+                      <video
+                        id={`remote-video-${pid}`}
+                        autoPlay
+                        playsInline
+                        className="camera-mirror w-full h-full object-cover"
+                        ref={(el) => {
+                          if (el && el.srcObject !== rStream) {
+                            el.srcObject = rStream
+                          }
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
 
                 {/* Photo preview overlay after capture */}
                 {sessionStatus === 'review' && capturedPhotos.length > 0 && (

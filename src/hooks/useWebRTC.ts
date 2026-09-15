@@ -7,12 +7,13 @@ interface PeerConnection {
   audioEl: HTMLAudioElement
 }
 
-interface AudioChatState {
+interface WebRTCState {
   isMicOn: boolean
   isMuted: boolean
   micError: string | null
   speakingUsers: Set<string>
   participantMicStatus: Record<string, boolean>
+  remoteVideoStreams: Record<string, MediaStream>
 }
 
 // Free Google STUN servers for NAT traversal
@@ -24,13 +25,14 @@ const ICE_SERVERS: RTCConfiguration = {
   ],
 }
 
-export function useAudioChat(roomCode: string, userId: string, participantIds: string[]) {
-  const [state, setState] = useState<AudioChatState>({
+export function useWebRTC(roomCode: string, userId: string, participantIds: string[], localVideoStream: MediaStream | null) {
+  const [state, setState] = useState<WebRTCState>({
     isMicOn: false,
     isMuted: false,
     micError: null,
     speakingUsers: new Set(),
     participantMicStatus: {},
+    remoteVideoStreams: {},
   })
 
   const localStreamRef = useRef<MediaStream | null>(null)
@@ -50,63 +52,6 @@ export function useAudioChat(roomCode: string, userId: string, participantIds: s
       })
     },
     [userId]
-  )
-
-  // Create a peer connection for a specific user
-  const createPeer = useCallback(
-    (remoteUserId: string, isInitiator: boolean): RTCPeerConnection => {
-      const pc = new RTCPeerConnection(ICE_SERVERS)
-
-      // Add local audio tracks to peer
-      if (localStreamRef.current) {
-        localStreamRef.current.getAudioTracks().forEach((track) => {
-          pc.addTrack(track, localStreamRef.current!)
-        })
-      }
-
-      // Handle remote audio stream
-      const audioEl = new Audio()
-      audioEl.autoplay = true
-      audioEl.setAttribute('playsinline', 'true')
-      audioEl.style.display = 'none'
-      document.body.appendChild(audioEl)
-
-      pc.ontrack = (event) => {
-        if (event.streams[0]) {
-          audioEl.srcObject = event.streams[0]
-          audioEl.play().catch(console.warn)
-          // Detect speaking
-          detectSpeaking(remoteUserId, event.streams[0])
-        }
-      }
-
-      // ICE candidate handler
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          broadcastSignal('ice-candidate', { candidate: event.candidate.toJSON() }, remoteUserId)
-        }
-      }
-
-      pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-          peersRef.current.delete(remoteUserId)
-        }
-      }
-
-      if (isInitiator) {
-        // Create and send offer
-        pc.createOffer({ offerToReceiveAudio: true })
-          .then((offer) => pc.setLocalDescription(offer))
-          .then(() => {
-            broadcastSignal('offer', { sdp: pc.localDescription }, remoteUserId)
-          })
-          .catch(console.error)
-      }
-
-      peersRef.current.set(remoteUserId, { userId: remoteUserId, pc, audioEl })
-      return pc
-    },
-    [broadcastSignal]
   )
 
   // Voice activity detection
@@ -139,6 +84,80 @@ export function useAudioChat(roomCode: string, userId: string, participantIds: s
   const detectOwnSpeaking = useCallback((stream: MediaStream) => {
     detectSpeaking(userId, stream)
   }, [userId, detectSpeaking])
+
+  // Create a peer connection for a specific user
+  const createPeer = useCallback(
+    (remoteUserId: string, isInitiator: boolean): RTCPeerConnection => {
+      const pc = new RTCPeerConnection(ICE_SERVERS)
+
+      // Add local audio tracks to peer
+      if (localStreamRef.current) {
+        localStreamRef.current.getAudioTracks().forEach((track) => {
+          pc.addTrack(track, localStreamRef.current!)
+        })
+      }
+
+      // Add local video tracks to peer
+      if (localVideoStream) {
+        localVideoStream.getVideoTracks().forEach((track) => {
+          pc.addTrack(track, localVideoStream)
+        })
+      }
+
+      // Handle remote stream
+      const audioEl = new Audio()
+      audioEl.autoplay = true
+      audioEl.setAttribute('playsinline', 'true')
+      audioEl.style.display = 'none'
+      document.body.appendChild(audioEl)
+
+      pc.ontrack = (event) => {
+        if (event.track.kind === 'audio' && event.streams[0]) {
+          audioEl.srcObject = event.streams[0]
+          audioEl.play().catch(console.warn)
+          // Detect speaking
+          detectSpeaking(remoteUserId, event.streams[0])
+        } else if (event.track.kind === 'video' && event.streams[0]) {
+          setState((prev) => ({
+            ...prev,
+            remoteVideoStreams: {
+              ...prev.remoteVideoStreams,
+              [remoteUserId]: event.streams[0],
+            }
+          }))
+        }
+      }
+
+      // ICE candidate handler
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          broadcastSignal('ice-candidate', { candidate: event.candidate.toJSON() }, remoteUserId)
+        }
+      }
+
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+          peersRef.current.delete(remoteUserId)
+        }
+      }
+
+      if (isInitiator) {
+        // Create and send offer
+        pc.createOffer({ offerToReceiveAudio: true })
+          .then((offer) => pc.setLocalDescription(offer))
+          .then(() => {
+            broadcastSignal('offer', { sdp: pc.localDescription }, remoteUserId)
+          })
+          .catch(console.error)
+      }
+
+      peersRef.current.set(remoteUserId, { userId: remoteUserId, pc, audioEl })
+      return pc
+    },
+    [broadcastSignal, localVideoStream, detectSpeaking]
+  )
+
+
 
   // Turn mic on
   const turnMicOn = useCallback(async () => {
@@ -250,6 +269,11 @@ export function useAudioChat(roomCode: string, userId: string, participantIds: s
               pc.addTrack(track, localStreamRef.current!)
             })
           }
+          if (localVideoStream) {
+            localVideoStream.getVideoTracks().forEach((track) => {
+              pc.addTrack(track, localVideoStream)
+            })
+          }
         }
         await peer.pc.setRemoteDescription(new RTCSessionDescription(sdp))
         const answer = await peer.pc.createAnswer()
@@ -278,7 +302,30 @@ export function useAudioChat(roomCode: string, userId: string, participantIds: s
     return () => {
       channel.unsubscribe()
     }
-  }, [roomCode, userId, createPeer, broadcastSignal])
+  }, [roomCode, userId, createPeer, broadcastSignal, localVideoStream])
+
+  // Replace video track if it changes
+  useEffect(() => {
+    if (localVideoStream) {
+      peersRef.current.forEach(({ pc }) => {
+        const senders = pc.getSenders()
+        const videoSender = senders.find(s => s.track?.kind === 'video')
+        const videoTrack = localVideoStream.getVideoTracks()[0]
+        
+        if (videoSender && videoTrack) {
+          videoSender.replaceTrack(videoTrack).catch(console.warn)
+        } else if (videoTrack && pc.signalingState !== 'closed') {
+          // If no video sender yet but we now have video, we might need to add it and renegotiate
+          // For simplicity we just addTrack and rely on normal negotiation if it happens
+          try {
+            pc.addTrack(videoTrack, localVideoStream)
+          } catch {
+            // Track might already be added
+          }
+        }
+      })
+    }
+  }, [localVideoStream])
 
   // When new participants join, try to connect
   useEffect(() => {
