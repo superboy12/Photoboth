@@ -173,7 +173,14 @@ export function useWebRTC(roomCode: string, userId: string, participantIds: stri
   // Turn mic on
   const turnMicOn = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      })
       localStreamRef.current = stream
       setState((prev) => ({ ...prev, isMicOn: true, micError: null }))
       detectOwnSpeaking(stream)
@@ -181,7 +188,8 @@ export function useWebRTC(roomCode: string, userId: string, participantIds: stri
       // Add track to all existing peers
       peersRef.current.forEach(({ pc }) => {
         stream.getAudioTracks().forEach((track) => {
-          pc.addTrack(track, stream)
+          const transceiver = pc.getTransceivers().find(t => t.receiver.track.kind === 'audio')
+          if (transceiver?.sender) transceiver.sender.replaceTrack(track)
         })
       })
 
@@ -274,19 +282,8 @@ export function useWebRTC(roomCode: string, userId: string, participantIds: stri
       if (type === 'offer' && sdp) {
         let peer = peersRef.current.get(from)
         if (!peer) {
-          const pc = createPeer(from, false)
+          createPeer(from, false)
           peer = peersRef.current.get(from)!
-          // Add our local stream tracks
-          if (localStreamRef.current) {
-            localStreamRef.current.getAudioTracks().forEach((track) => {
-              pc.addTrack(track, localStreamRef.current!)
-            })
-          }
-          if (localVideoStream) {
-            localVideoStream.getVideoTracks().forEach((track) => {
-              pc.addTrack(track, localVideoStream)
-            })
-          }
         }
         await peer.pc.setRemoteDescription(new RTCSessionDescription(sdp))
         const answer = await peer.pc.createAnswer()
