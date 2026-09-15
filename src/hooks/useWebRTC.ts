@@ -90,17 +90,22 @@ export function useWebRTC(roomCode: string, userId: string, participantIds: stri
     (remoteUserId: string, isInitiator: boolean): RTCPeerConnection => {
       const pc = new RTCPeerConnection(ICE_SERVERS)
 
+      pc.addTransceiver('audio', { direction: 'sendrecv' })
+      pc.addTransceiver('video', { direction: 'sendrecv' })
+
       // Add local audio tracks to peer
       if (localStreamRef.current) {
         localStreamRef.current.getAudioTracks().forEach((track) => {
-          pc.addTrack(track, localStreamRef.current!)
+          const transceiver = pc.getTransceivers().find(t => t.receiver.track.kind === 'audio')
+          if (transceiver?.sender) transceiver.sender.replaceTrack(track)
         })
       }
 
       // Add local video tracks to peer
       if (localVideoStream) {
         localVideoStream.getVideoTracks().forEach((track) => {
-          pc.addTrack(track, localVideoStream)
+          const transceiver = pc.getTransceivers().find(t => t.receiver.track.kind === 'video')
+          if (transceiver?.sender) transceiver.sender.replaceTrack(track)
         })
       }
 
@@ -155,15 +160,7 @@ export function useWebRTC(roomCode: string, userId: string, participantIds: stri
         }
       }
 
-      if (isInitiator) {
-        // Create and send initial offer just in case onnegotiationneeded doesn't fire
-        pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
-          .then((offer) => pc.setLocalDescription(offer))
-          .then(() => {
-            broadcastSignal('offer', { sdp: pc.localDescription }, remoteUserId)
-          })
-          .catch(console.error)
-      }
+
 
       peersRef.current.set(remoteUserId, { userId: remoteUserId, pc, audioEl })
       return pc
