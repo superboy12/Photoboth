@@ -112,17 +112,18 @@ export function useWebRTC(roomCode: string, userId: string, participantIds: stri
       document.body.appendChild(audioEl)
 
       pc.ontrack = (event) => {
-        if (event.track.kind === 'audio' && event.streams[0]) {
-          audioEl.srcObject = event.streams[0]
+        const stream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track])
+        if (event.track.kind === 'audio') {
+          audioEl.srcObject = stream
           audioEl.play().catch(console.warn)
           // Detect speaking
-          detectSpeaking(remoteUserId, event.streams[0])
-        } else if (event.track.kind === 'video' && event.streams[0]) {
+          detectSpeaking(remoteUserId, stream)
+        } else if (event.track.kind === 'video') {
           setState((prev) => ({
             ...prev,
             remoteVideoStreams: {
               ...prev.remoteVideoStreams,
-              [remoteUserId]: event.streams[0],
+              [remoteUserId]: stream,
             }
           }))
         }
