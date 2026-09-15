@@ -342,6 +342,7 @@ export default function RoomPage() {
                         id={`remote-video-${pid}`}
                         autoPlay
                         playsInline
+                        muted
                         className="camera-mirror w-full h-full object-cover"
                         ref={(el) => {
                           if (el && el.srcObject !== rStream) {
